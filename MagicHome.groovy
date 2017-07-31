@@ -1,572 +1,521 @@
-import static java.util.UUID.randomUUID 
-import java.security.MessageDigest
-import javax.crypto.spec.SecretKeySpec
-import javax.crypto.Mac
-import java.security.SignatureException
+require 'sinatra'
+require 'openssl'
+require 'csv'
+require 'json'
 
-metadata {
-	definition (name: "MagicHome Wifi Devices", namespace: "smartthings", author: "SmartThings") {
-		capability "Switch Level"
-		capability "Actuator"
-		capability "Color Control"
-		capability "Switch"
-		capability "Polling"
-		capability "Refresh"
-		capability "Sensor"
-        capability "Color Temperature"
-		
-		command "setColor"
-        command "setAdjustedColor"
-        command "setWWLevel"
-        command "setCWLevel"
-		command "preset1"
-		command "preset2"
-        command "preset3"
-		command "preset4"
-		command "preset5"
-        command "preset6"
-        command "preset7"
-        command "preset8"
-		command "setPresetSpeed"
-        
-        attribute "WWLevel", "string"
-        attribute "CWLevel", "string"
-        attribute "PresetSpeed", "string"
-        attribute "currentPreset", "string"
-	}
-    
-    preferences {  
-        section("Local server address and port"){
-            input "localServer", "text", title: "Server", description: "Local Web Server IP", required: true
-            input "localPort", "number", title: "Port", description: "Local Web Server Port", required: true, defaultValue: 80
-        }
-       input(name:"bulb_ips", type:"string", title: "Bulb IP Addresses:",
-       		  description: "Bulb IP Addresses (Comma Separated)", defaultValue: "${bulb_ips}",
-              required: false, displayDuringSetup: true)
-		
-        input(name:"rgb_ww_ips", type:"string", title: "WW IP Addresses:",
-       		  description: "RGB & RGB + WW IP Addresses (Comma Separated)", defaultValue: "${rgb_ww_ips}",
-              required: false, displayDuringSetup: true)
-              
-        input(name:"rgb_ww_cw_ips", type:"string", title: "RGB + WW + CW Addresses:",
-       		  description: "RGB + WW + CW IP Addresses (Comma Separated)", defaultValue: "${rgb_ww_cw_ips}",
-              required: false, displayDuringSetup: true)
-              
-         input(name:"legacy_bulb_ips", type:"string", title: "Legacy Bulb IP Addresses:",
-       		  description: "Legacy Bulb (Firmware <= v3 IP Addresses (Comma Separated)", defaultValue: "${legacy_bulb_ips}",
-              required: false, displayDuringSetup: true)
-	}
-    
-    tiles(scale: 2) {
-    	multiAttributeTile(name:"switch", type: "lighting", width: 6, height: 4, canChangeIcon: true){
-			tileAttribute ("device.switch", key: "PRIMARY_CONTROL") {
-				attributeState("on", label:'${name}', action:"switch.off", icon:"st.illuminance.illuminance.bright", backgroundColor: "#F39C12", nextState:"turningOff")
-				attributeState "off", label:'${name}', action:"switch.on", icon:"st.illuminance.illuminance.dark", backgroundColor:"#ffffff", nextState:"turningOn"
-				attributeState "turningOn", label:'Turn on...', icon:"st.illuminance.illuminance.bright", backgroundColor:"#f7bb5d"
-				attributeState "turningOff", label:'Turn off...', icon:"st.illuminance.illuminance.dark", backgroundColor:"#f7bb5d"
-            }
-			tileAttribute ("device.level", key: "SLIDER_CONTROL") {
-				attributeState "level", action:"switch level.setLevel"
-			}
-            tileAttribute ("device.color", key: "COLOR_CONTROL") {
-				attributeState "color", action:"setColor"
-			}
-            tileAttribute("device.level", key: "SECONDARY_CONTROL") {
-   		 		attributeState("default", label:'Level: ${currentValue}%', unit:"%")
-  			}
+require_relative 'config_provider'
+config_provider = MagicHomeGateway::CachingConfigProvider.new(MagicHomeGateway::ConfigProvider.new)
 
-		}
-        controlTile("WWSliderControl", "WWLevel", "slider", height: 2,
-             width: 4, inactiveLabel: false, range:"(0..99)") {
-    		state "WWLevel", action:"setWWLevel"
-		}
-        valueTile("WWLevel", "WWLevel", height: 2, width: 2) {
-    		state "WWLevel", label: 'Warm White: ${currentValue}%'
-		}
-        controlTile("CWSliderControl", "CWLevel", "slider", height: 2,
-             width: 4, inactiveLabel: false, range:"(0..99)") {
-    		state "CWLevel", action:"setCWLevel"
-		}
-        valueTile("CWLevel", "CWLevel", height: 2, width: 2) {
-    		state "CWLevel", label: 'Cool White: ${currentValue}%'
-		}
-        standardTile("refresh", "device.switch", width: 2, height: 2, inactiveLabel: false, decoration: "flat") {
-            state "default", label:"", action:"refresh.refresh", icon:"st.secondary.refresh"
-        }
-        standardTile("preset1", "device.currentPreset", height: 1, inactiveLabel: false, canChangeIcon: false, ) {
-            state "1", label:"7 Col Fade", action:"preset1", icon:"st.illuminance.illuminance.bright", backgroundColor:"#FFFFCC"
-            state "0", label:"7 Col Fade", action:"preset1", icon:"st.illuminance.illuminance.dark", backgroundColor:"#CCCCCC", defaultState: true
-        }
-        standardTile("preset2", "device.currentPreset", height: 1, inactiveLabel: false, canChangeIcon: false) {
-            state "2", label:"White Fade", action:"preset2", icon:"st.illuminance.illuminance.bright", backgroundColor:"#FFFFFF"
-            state "0", label:"White Fade", action:"preset2", icon:"st.illuminance.illuminance.dark", backgroundColor:"#CCCCCC", defaultState: true
-        }
-        standardTile("preset3", "device.currentPreset", height: 1, inactiveLabel: false, canChangeIcon: false) {
-            state "3", label:"7 Col Strobe", action:"preset3", icon:"st.illuminance.illuminance.bright", backgroundColor:"#FFFFCC"
-            state "0", label:"7 Col Strobe", action:"preset3", icon:"st.illuminance.illuminance.dark", backgroundColor:"#CCCCCC", defaultState: true
-        }
-        standardTile("preset4", "device.currentPreset", height: 1, inactiveLabel: false, canChangeIcon: false) {
-            state "4", label:"7 Col Jump", action:"preset4", icon:"st.illuminance.illuminance.bright", backgroundColor:"#FFFFCC"
-            state "0", label:"7 Col Jump", action:"preset4", icon:"st.illuminance.illuminance.dark", backgroundColor:"#CCCCCC", defaultState: true
-        }
-        standardTile("preset5", "device.currentPreset", height: 1, inactiveLabel: false, canChangeIcon: false) {
-            state "5", label:"White Strobe", action:"preset5", icon:"st.illuminance.illuminance.bright", backgroundColor:"#FFFFFF"
-            state "0", label:"White Strobe", action:"preset5", icon:"st.illuminance.illuminance.dark", backgroundColor:"#CCCCCC", defaultState: true
-        }
-        standardTile("preset6", "device.currentPreset", height: 1, inactiveLabel: false, canChangeIcon: false) {
-            state "6", label:"Blue Strobe", action:"preset6", icon:"st.illuminance.illuminance.bright", backgroundColor:"#0000FF"
-            state "0", label:"Blue Strobe", action:"preset6", icon:"st.illuminance.illuminance.dark", backgroundColor:"#CCCCCC", defaultState: true
-        }
-        standardTile("preset7", "device.currentPreset", height: 1, inactiveLabel: false, canChangeIcon: false) {
-            state "7", label:"Red/Blue Fade", action:"preset7", icon:"st.illuminance.illuminance.bright", backgroundColor:"#FF00FF"
-            state "0", label:"Red/Blue Fade", action:"preset7", icon:"st.illuminance.illuminance.dark", backgroundColor:"#CCCCCC", defaultState: true
-        }
-        standardTile("preset8", "device.currentPreset", height: 1, inactiveLabel: false, canChangeIcon: false) {
-            state "8", label:"Yellow Fade", action:"preset8", icon:"st.illuminance.illuminance.bright", backgroundColor:"#FFFF00"
-            state "0", label:"Yellow Fade", action:"preset8", icon:"st.illuminance.illuminance.dark", backgroundColor:"#CCCCCC", defaultState: true
-        }
-        valueTile("PresetSpeed", "PresetSpeed", height: 1, width: 2) {
-    		state "PresetSpeed", label: 'Speed: ${currentValue}%'
-		}
-        controlTile("PresetSpeedSliderControl", "PresetSpeed", "slider", height: 1,
-             width: 4, inactiveLabel: false, range:"(0..100)") {
-    		state "PresetSpeed", action:"setPresetSpeed"
-		}
-    }
-   
-    
-	main(["switch"])
-	details(["switch", 
-    		"rgbSelector", 
-            "levelSliderControl", 
-            "WWLevel", 
-            "WWSliderControl",
-            "CWLevel",
-            "CWSliderControl",
-            "refresh",
-            "preset1",
-            "preset2",
-            "preset3",
-            "preset4",
-            "preset5",
-            "preset6",
-            "preset7",
-            "preset8",
-            "PresetSpeed",
-            "PresetSpeedSliderControl" ])
-}
+before do
 
-def poll() {
-	parent.poll(this)
-}
+  timestamp = request.env['HTTP_X_SIGNATURE_TIMESTAMP']
+  payload   = request.env['HTTP_X_SIGNATURE_PAYLOAD']
+  signature = request.env['HTTP_X_SIGNATURE']
 
-// parse events into attributes
-def parse(resp) {	    
-	parseResponse(resp)    
-}
+  halt 403 if payload.nil? or timestamp.nil? or signature.nil?
 
-private parseResponse(resp){
+  digest = OpenSSL::Digest.new('sha1')
+  data = (payload + timestamp)
+  hmac = OpenSSL::HMAC.hexdigest(digest, config_provider.hmac_key, data)
 
-log.debug resp
-
-resp.headers.each {
-    	// log.info "-----------------${it.name} >> ${it.value}--------------"
-        
-         if(it.name.equalsIgnoreCase("powerState") && it.value != null){
-         	if(it.value.toString() != device.currentValue("power")){
-            	log.info "Changing power state from ${device.currentValue("power")} to ${it.value}"
-    			sendEvent(name: "power", value: it.value.toString())
-            }
-            else{
-           	 	log.info "Power State Sustained"
-            }
-         }
-         if(it.name.equalsIgnoreCase("level") && it.value != null) {
-         	if(Math.ceil(it.value.toFloat()).toInteger() != device.currentValue("level").toInteger()){
-            	log.info "Changing level from ${device.currentValue("level").toInteger()} to ${Math.ceil(it.value.toFloat()).toInteger()}"
-             	if(Math.ceil(it.value.toFloat()).toInteger() == 100.0){
-                	sendEvent(name: "level", value: 99) //100% brightness breaks the level bar (and I'm not sure why)
-                }
-                else{
-                	sendEvent(name: "level", value: Math.ceil(it.value.toFloat()).toInteger())
-                }
-                
-            }
-            else{
-            	log.info "Level sustained"
-            }
-         }
-         if(it.name.equalsIgnoreCase("hex") && it.value != null){
-         	if(device.currentValue("color") != it.value){
-         		log.info "Changing color from ${device.currentValue("color")} to ${it.value}"
-        		sendEvent(name: "color", value: it.value)
-                }
-                else{
-               	 log.info "Color Sustained"
-                }
-        }
-        if(it.name.equalsIgnoreCase("WWLevel") && it.value != null){
-        	if(Math.ceil(it.value.toFloat()).toInteger() != device.currentValue("WWLevel").toInteger()){
-            	log.info "WWLevel changing from ${device.currentValue("WWLevel").toInteger()} to ${Math.ceil(it.value.toFloat()).toInteger()}"
-        		sendEvent(name: "WWLevel", value: "${Math.ceil(it.value.toFloat()).toInteger()}")
-    		}
-            else{
-            	log.info "WW Level Sustained"
-            }
-        }
-        if(it.name.equalsIgnoreCase("CWLevel") && it.value != null){
-        	if(Math.ceil(it.value.toFloat()).toInteger() != device.currentValue("CWLevel").toInteger()){
-            	log.info "CWLevel changing from ${device.currentValue("CWLevel").toInteger()} to ${Math.ceil(it.value.toFloat()).toInteger()}"
-        		sendEvent(name: "CWLevel", value: "${Math.ceil(it.value.toFloat()).toInteger()}")
-    		}
-            else{
-            	log.info "CW Level Sustained"
-            }
-        }
-    }
-}
+  halt 403 unless hmac == signature
+  halt 412 unless ((Time.now.to_i - 20) <= timestamp.to_i)
+end
 
 
+post '/leds' do
 
-// Handle commands
-// Turn the bulb on
-def on() {
-	sendEvent(name: "switch", value: "on")
-    sendUpdateCommand([status: "on"])
-}
+  # Convert the parameters into something usable
+  params = request.env["rack.input"].read
+  params = JSON.parse params.gsub('=>', ':')
+  puts params.inspect
 
-// Turn the bulb off
-def off() {
-	sendEvent(name: "switch", value: "off")
-    sendUpdateCommand([status: "off"])
-}
+  # Initiate constants, if not already initiated
+  WARMWHITEHUE ||= 16.66666666666666
+  WARMWHITESATURATION ||= 27.45097875595093
+  WARMWHITEHUE2 ||= 16
 
+  # Convert the WW and CW levels to the device's specs
+  ww = params['WWLevel'].to_i*2.55  if params['WWLevel'] != nil
+  cw = params['CWLevel'].to_i*2.55 if params['CWLevel'] != nil
 
-def setSaturation(saturation) {
+  # Prepare the RGB values to send to the device
+  sendPreset = true if params.include?('preset')
 
-	sendEvent(name: "saturation", value: saturation)
-    
-    // Send info to the device log
-	log.info "setSaturation(Saturation: " + device.currentValue("saturation") + ")"
-	
-    // Send the command to the device
-    setColor([saturation:saturation])
-}
+  params.include?('red') && params.include?('green') && params.include?('blue') ? (useRGB = true) : (useRGB = false)
 
-def setHue(hue) {
-	
-    // Remove this from the public commit! It enables WW from certain homekit apps
-    
-    if(hue == 11.76470588235294){
-    	hue = 16.66666666666666
-    }
-    
-	sendEvent(name: "hue", value: hue)
-    // Send info to the device log
-	log.info "setHue(Hue: " + device.currentValue("hue") + ")"
-    
-    // Send the command to the device
-    setColor([hue:hue])
-}
+  if !useRGB && params.include?('hue') && params.include?('saturation') && params.include?('level')
+    h = params['hue'].to_f*3.6
+    s = params['saturation'].to_f
+    l = params['level'].to_f
+    l > 254 ? (l = 254) : ()
+    l < 0 ? (l = 0) : ()
 
-def setLevel(level) {
-	//If device is off, turn it on.
-    //if(device.currentValue("status") != "on"){
-    //	on()
-    //}
-
-    sendEvent(name: "level", value: level)
-    
-    // Send info to the device log
-	log.info "setLevel(Level: " + device.currentValue("level") + ")"
-
-    // Send the command to the device
-    setColor([level: level])
-}
-
-def setColor(value) {
-    // If a hue wasn't passed through, re-assign it
-    if(!value.hue){ value += [hue: device.currentValue("hue")] }
-    else{
-    	if(value.hue == 11.76470588235294){
-    		value.hue = 16.66666666666666
-    	}
-    	sendEvent(name: 'hue', value: value.hue) 
-    }
-    // If a saturation wasn't passed through, re-assign it
-    if(!value.saturation){ value += [saturation: device.currentValue("saturation")] }
-    else{ sendEvent(name: 'saturation', value: value.saturation) }
-    
-    // If no level is assigned yet, set it to 100%
-	if(device.currentValue("level") == null){ sendEvent(name: "level", value: 100) }
-    // Get the device's current level to send
-    if (value.level){ value += [level: device.currentValue("level")] }
-    else{ value.level = device.currentValue("level") }
-    
-    //Change the assigned color if we have one	
-    if (value.hex){ sendEvent(name: "color", value: value.hex) }
-    
-    //Sending RGB is faster than sending hsl
-    //if (!value.red && !value.blue && !value.green){ 	
-    	log.debug 'Adding RGB via HSV conversion'
-        
-        float conversionhue = device.currentValue('hue')/100
-        float conversionsaturation = device.currentValue('saturation')/100
-        float conversionvalue = device.currentValue('level')/100
-            
-        int h = (int)(conversionhue * 6);
-        float f = conversionhue * 6 - h;
-        float p = conversionvalue * (1 - conversionsaturation);
-        float q = conversionvalue * (1 - f * conversionsaturation);
-        float t = conversionvalue * (1 - (1 - f) * conversionsaturation);
-		
-        conversionvalue *= 255
-		f *= 255
-        p *= 255
-        q *= 255
-        t *= 255
-                
-    	if(h==0) { value += [red: conversionvalue, green: t, blue: p] }
-        else if(h==1) { value += [red: q, green: conversionvalue, blue: p] }
-        else if(h==2) { value += [red: p, green: conversionvalue, blue: t] }
-        else if(h==3) { value += [red: p, green: q, blue: conversionvalue] }
-        else if(h==4) { value += [red: t, green: p, blue: conversionvalue] }
-        else if(h==5) { value += [red: conversionvalue, green: p,blue: q] }
-        else{ value += [red: 0, green: 0, blue: 0] }
-
-	//}
-    // Add Warm White Data
-    if(!value.WWLevel){
-        if(device.currentValue("WWLevel") == null){ sendEvent(name: "WWLevel", value: 99) }
-        value += [WWLevel: device.currentValue('WWLevel')]
-    }
-    
-    // Add Cold White Data
-    if(!value.CWLevel){
-        if(device.currentValue("CWLevel") == null){ sendEvent(name: "CWLevel", value: 99) }
-        value += [CWLevel: device.currentValue('CWLevel')]
-    }
-    
-    // Disable any current presets
-    sendEvent(name:"currentPreset", value: "0")
-
-    //Send the command to the device
-    sendUpdateCommand(value)
-}
-
-def setColorTemperature(newTemp){
-// If the device's temperature was requested to change, then let's set some proportions!
-// Bulbs need to change their hue to ~6.95, where a saturation of 92 will be warm, and 70 will be cool
-// Additionally, we need to take the difference of 2700 to 6500 and change our warm and cool white sliders
-	
-    tempPercent = (newTemp-2700)/(6500-2700)*100 // results in 100 to 0
-
-	// Update the device level
-    bulbSaturation = 70 + (tempPercent * 0.22)
-
-    warmPercent = tempPercent
-    coolPercent = (tempPercent - 100).abs()
-
-	sendEvent(name: "hue", value: 6.95)
-    sendEvent(name: "saturation", value: bulbSaturation)
-	sendEvent(name: "WWLevel", value: warmPercent)
-    sendEvent(name: "CWLevel", value: coolPercent)
-    
-    setColor()
-}
-
-def setAdjustedColor(value){
-    // Pass this through to the color since we adjust it on the server
-	setColor(value)
-}
-
-def setWWLevel(WWLevel){
-	 // Update the device level
-	sendEvent(name: "WWLevel", value: WWLevel)
-
-    // Send info to the device log
-	log.info "setWWLevel(WWLevel: " + device.currentValue("WWLevel") + ")"
-    
-    // Send the command to the device
-	setColor([WWLevel: WWLevel])
-}
-
-def setCWLevel(CWLevel){
-	 // Update the device level
-	sendEvent(name: "CWLevel", value: CWLevel)
-
-    // Send info to the device log
-	log.info "setCWLevel(CWLevel: " + device.currentValue("CWLevel") + ")"
-    
-    // Send the command to the device
-	setColor([CWLevel: CWLevel])
-}
-
-def setPresetSpeed(presetSpeed){
-    if(presetSpeed == null) {sendEvent(name:"PresetSpeed", value: 50)}
-    if(presetSpeed <= 100 && presetSpeed >= 0){
-    sendEvent(name:"PresetSpeed", value: presetSpeed)
-    }
-    log.debug "Changing PresetSpeed to " + device.currentValue("PresetSpeed") + "%"
-    
-    switch (device.currentValue("currentPreset")) {
-            case null:
-                break
-            case "1":
-                preset1()
-                break
-            case "2":
-                preset2()
-                break
-            case "3":
-                preset3()
-                break
-            case "4":
-                preset4()
-                break
-            case "5":
-                preset5()
-                break
-            case "6":
-                preset6()
-                break
-            case "7":
-                preset7()
-                break
-            case "8":
-                preset8()
-                break
-            default:
-                break
-    }    
-}
-
-
-def preset1() { if(device.currentValue("PresetSpeed") == null) {setPresetSpeed(50)}
-				 sendEvent(name:"currentPreset", value: "1")
-                 log.debug 'Calling preset 1 with PresetSpeed ' + device.currentValue("PresetSpeed") + '% and currentPreset #' + device.currentValue("currentPreset")+'.'
-				 sendUpdateCommand([preset: "1", presetSpeed: device.currentValue("PresetSpeed")]) } // Seven color crossfade
-def preset2() {if(device.currentValue("PresetSpeed") == null) {setPresetSpeed(50)}
-				 sendEvent(name:"currentPreset", value: "2")
-                 log.debug 'Calling preset 2 with PresetSpeed ' + device.currentValue("PresetSpeed") + '% and currentPreset #' + device.currentValue("currentPreset")+'.'
-				 sendUpdateCommand([preset: "8", presetSpeed: device.currentValue("PresetSpeed")]) } // White gradual fade
-def preset3() {if(device.currentValue("PresetSpeed") == null) {setPresetSpeed(50)}
-				 sendEvent(name:"currentPreset", value: "3")
-                 log.debug 'Setting preset 3 with PresetSpeed ' + device.currentValue("PresetSpeed") + '% and currentPreset #' + device.currentValue("currentPreset")+'.'
-				 sendUpdateCommand([preset: "12", presetSpeed: device.currentValue("PresetSpeed")]) } // Seven color strobe flash
-def preset4() {if(device.currentValue("PresetSpeed") == null) {setPresetSpeed(50)}
-				 sendEvent(name:"currentPreset", value: "4")
-                 log.debug 'Setting preset 4 with PresetSpeed ' + device.currentValue("PresetSpeed") + '% and currentPreset #' + device.currentValue("currentPreset")+'.'
-				 sendUpdateCommand([preset: "20", presetSpeed: device.currentValue("PresetSpeed")]) } // Seven color jump
-def preset5() {if(device.currentValue("PresetSpeed") == null) {setPresetSpeed(50)}
-				 sendEvent(name:"currentPreset", value: "5")
-                 log.debug 'Setting preset 5 with PresetSpeed ' + device.currentValue("PresetSpeed") + '% and currentPreset #' + device.currentValue("currentPreset")+'.'
-				 sendUpdateCommand([preset: "19", presetSpeed: device.currentValue("PresetSpeed")]) } // White strobe flash
-def preset6() {if(device.currentValue("PresetSpeed") == null) {setPresetSpeed(50)}
-				 sendEvent(name:"currentPreset", value: "6")
-                 log.debug 'Setting preset 6 with PresetSpeed ' + device.currentValue("PresetSpeed") + '% and currentPreset #' + device.currentValue("currentPreset")+'.'
-				 sendUpdateCommand([preset: "15", presetSpeed: device.currentValue("PresetSpeed")]) } // Blue strobe flash
-def preset7() {if(device.currentValue("PresetSpeed") == null) {setPresetSpeed(50)}
-				 sendEvent(name:"currentPreset", value: "7")
-                 log.debug 'Setting preset 7 with PresetSpeed ' + device.currentValue("PresetSpeed") + '% and currentPreset #' + device.currentValue("currentPreset")+'.'
-				 sendUpdateCommand([preset: "10", presetSpeed: device.currentValue("PresetSpeed")]) } // Red/Blue crossfade
-def preset8() {if(device.currentValue("PresetSpeed") == null) {setPresetSpeed(50)}
-				 sendEvent(name:"currentPreset", value: "8")
-                 log.debug 'Setting preset 8 with PresetSpeed ' + device.currentValue("PresetSpeed") + '% and currentPreset #' + device.currentValue("currentPreset")+'.'
-				 sendUpdateCommand([preset: "5", presetSpeed: device.currentValue("PresetSpeed")]) } // Yellow Gradual change
-
-def hmac(String data, String key) throws SignatureException {
-  final Mac hmacSha1;
-  try {
-     hmacSha1 = Mac.getInstance("HmacSHA1");
-  } catch (Exception nsae) {
-      hmacSha1 = Mac.getInstance("HMAC-SHA-1");         
-  }
+    r,g,b = hsvToRgb(h,s,l)
+    params['red'] = r
+    params['green'] = g
+    params['blue'] = b
+  elsif useRGB
+    r = params['red'].to_i
+    g = params['green'].to_i
+    b = params['blue'].to_i
+    useRGB = true
+  end
   
-  final SecretKeySpec macKey = new SecretKeySpec(key.getBytes(), "RAW");
-  hmacSha1.init(macKey);
+  # Universally set which devices we'll call  
+  params['bulb_ips'] != 'null' && params['bulb_ips'] != nil ? (use_bulbs = true) : (use_bulbs = false)
+  params['rgb_ww_ips'] != 'null' && params['rgb_ww_ips'] != nil ? (use_rgb_ww = true) : (use_rgb_ww = false)
+  params['rgb_ww_cw_ips'] != 'null' && params['rgb_ww_cw_ips'] != nil ? (use_rgb_ww_cw = true) : (use_rgb_ww_cw = false)
+  params['legacy_bulb_ips'] != 'null' && params['legacy_bulb_ips'] != nil ? (use_legacy_bulbs = true) : (use_legacy_bulbs = false)
+
+  # Set the dynamic variable names
+  if use_bulbs
+    bulb_names = ""
+    params['bulb_ips'].delete(' ').parse_csv.each{|x| 
+      bulb_names += params['bulb_ips'].delete('.').delete(',').delete(' ')
+    }
+  elsif use_rgb_ww
+    rgb_ww_names = ""
+    params['rgb_ww_ips'].delete(' ').parse_csv.each{|x| 
+      rgb_ww_names += params['rgb_ww_ips'].delete('.').delete(',').delete(' ')
+    }
+  elsif use_rgb_ww_cw
+    rgb_ww_cw_names = ""
+    params['rgb_ww_cw_ips'].delete(' ').parse_csv.each{|x| 
+      rgb_ww_cw_names += params['rgb_ww_cw_ips'].delete('.').delete(',').delete(' ')
+    }
+  elsif use_legacy_bulbs
+    legacy_bulb_names = ""
+    params['legacy_bulb_ips'].delete(' ').parse_csv.each{|x| 
+      legacy_bulb_names += params['legacy_bulb_ips'].delete('.').delete(',').delete(' ')
+    }
+  end
+
+  # Individual API calls for each type of device, if they exist
+  use_bulbs && !instance_variable_defined?("@a#{bulb_names}") ? (instance_variable_set("@a#{bulb_names}", LEDENET::Api.new( params['bulb_ips'].delete(' ').parse_csv))) : ()
+  use_rgb_ww && !instance_variable_defined?("@a#{rgb_ww_names}") ? (instance_variable_set("@a#{rgb_ww_names}", LEDENET::Api.new( params['rgb_ww_ips'].delete(' ').parse_csv))) : ()
+  use_rgb_ww_cw && !instance_variable_defined?("@a#{rgb_ww_cw_names}") ? (instance_variable_set("@a#{rgb_ww_cw_names}", LEDENET::Api.new( params['rgb_ww_cw_ips'].delete(' ').parse_csv))) : ()
+  use_legacy_bulbs && !instance_variable_defined?("@a#{legacy_bulb_names}") ? (instance_variable_set("@a#{legacy_bulb_names}", LEDENET::Api.new( params['legacy_bulb_ips'].delete(' ').parse_csv))) : ()
+
+  # Turn all of the called devices on or off
+  if params['status'] == 'on' || params['switch'] == 'on'
+    puts "Turning devices on..."
+    use_bulbs ? (instance_variable_get("@a#{bulb_names}").on) : ()
+    use_rgb_ww ? (instance_variable_get("@a#{rgb_ww_names}").on) : ()
+    use_rgb_ww_cw ? (instance_variable_get("@a#{rgb_ww_cw_names}").on) : ()
+    use_legacy_bulbs ? (instance_variable_get("@a#{legacy_bulb_names}").legacy_bulb_on) : ()
+
+  elsif params['status'] == 'off' || params['switch'] == 'off'
+    puts "Shutting devices off..."
+    use_bulbs ? (instance_variable_get("@a#{bulb_names}").off) : ()
+    use_rgb_ww ? (instance_variable_get("@a#{rgb_ww_names}").off) : ()
+    use_rgb_ww_cw ? (instance_variable_get("@a#{rgb_ww_cw_names}").off) : ()
+    use_legacy_bulbs ? (instance_variable_get("@a#{legacy_bulb_names}").legacy_bulb_off) : ()
+
+  end
+
+  # Send a preset function to a device
+  if sendPreset
+    presets = { "1"=> 0x25, "2" => 0x26, "3" => 0x27, "4" => 0x28, "5" => 0x29, "6" => 0x30, "7" => 0x31, "8" => 0x32, "9" => 0x33, "10" => 0x34, "11" => 0x35, "12" => 0x36, "13" => 0x37, "14" => 0x38, "15" => 0x39, "16" => 0x40, "17" => 0x41, "18" => 0x42, "19" => 0x43, "20" => 0x44, "21" => 0x45 }
+    speed = (100 - params['presetSpeed'].to_i)*2.55
+
+    puts "Sending preset to devices..."
+    use_bulbs ? (instance_variable_get("@a#{bulb_names}").send_default_function( presets[params['preset']], speed)) : ()
+    use_rgb_ww ? (instance_variable_get("@a#{rgb_ww_names}").send_default_function( presets[params['preset']], speed)) : ()
+    use_rgb_ww_cw ? (instance_variable_get("@a#{rgb_ww_cw_names}").send_default_function( presets[params['preset']], speed)) : ()
+    use_legacy_bulbs ? (instance_variable_get("@a#{legacy_bulb_names}").send_legacy_default_function(presets[params['preset']], speed)) : ()
+  end
+
+  # Update all devices using RGB values
+  if useRGB
+    if params['hue'].to_f == WARMWHITEHUE || params['hue'].to_f == WARMWHITEHUE2
+      l = params['level'].to_i*2.55
+      l > 254 ? (l = 254) : ()
+      l < 0 ? (l = 0) : ()
+      
+      use_bulbs ? (puts "Updating bulbs' white value") : ()
+      use_bulbs ? (instance_variable_get("@a#{bulb_names}").update_bulb_white(l)) : ()
+      use_legacy_bulbs ? (puts "Updating legacy bulbs' white value") : ()
+      use_legacy_bulbs ? (instance_variable_get("@a#{legacy_bulb_names}").update_legacy_bulb_white(l)) : ()
+    else
+      use_bulbs ? (puts "Updating bulbs' color") : ()
+      use_bulbs ? (instance_variable_get("@a#{bulb_names}").update_bulb_color(r,g,b)) : ()
+      use_legacy_bulbs ? (puts "Updating legacy bulbs' colors") : ()
+      use_legacy_bulbs ? (instance_variable_get("@a#{legacy_bulb_names}").update_legacy_bulb_color(r,g,b)) : ()
+    end
+    use_rgb_ww ? (puts "Updating RGB WW devices' colors") : ()
+    use_rgb_ww ? (instance_variable_get("@a#{rgb_ww_names}").update_ww(r,g,b,ww)) : ()
+    use_rgb_ww_cw ? (puts "Updating RGB WW CW devices' colors") : ()
+    use_rgb_ww_cw ? (instance_variable_get("@a#{rgb_ww_cw_names}").update_ww_cw(r,g,b,ww,cw)) : ()
+  end
+
+  # if params.include?('refresh')
+  #   if bulb_api != nil
+  #   r,g,b,w,powerState = bulb_api.current_status
+  #   h,s,l = rgbToHsv(r,g,b)
+  #   r,g,b = hsvToRgb(WARMWHITEHUE, WARMWHITESATURATION, (w/2.55)) if [r,g,b] == [0,0,0] && w > 0
+  #   headers \
+  #       "powerState" => powerState,
+  #       "level" => l.to_s,
+  #       "hex" =>  "#" + to_hex(r) + to_hex(g) + to_hex(b),
+  #   end
+
+  #   if rgb_api != nil
+  #   r,g,b,w,powerState = rgb_api.current_status
+  #   h,s,l = rgbToHsv(r,g,b)
+  #     headers \
+  #       "powerState" => powerState,
+  #       "level" => l.to_s,
+  #       "hex" =>  "#" + to_hex(r) + to_hex(g) + to_hex(b),
+  #   end
+  #   if rgb_ww_api != nil
+  #   r,g,b,w,powerState = rgb_ww_api.current_status
+  #   h,s,l = rgbToHsv(r,g,b)
+  #     headers \
+  #       "powerState" => powerState,
+  #       "level" => l.to_s,
+  #       "hex" =>  "#" + to_hex(r) + to_hex(g) + to_hex(b),
+  #       "WWLevel" => (w/2.55).to_s
+  #   end
+
+  #   if rgb_ww_cw_api != nil
+  #   r,g,b,w,cw,powerState = rgb_ww_cw_api.current_status
+  #   h,s,l = rgbToHsv(r,g,b)
+  #     headers \
+  #       "powerState" => powerState,
+  #       "level" => l.to_s,
+  #       "hex" =>  "#" + to_hex(r) + to_hex(g) + to_hex(b),
+  #       "CWLevel" => (w/2.55).to_s
+  #   end
+  # end
+  status 200
+  body '{"success": true}'
+end
+
+# def rgbToHsv(r, g, b)
+#   # Takes an RGB value (0-255) and returns HSV in 0-360, 0-100, 0-100
+#   r /= 255.0
+#   g /= 255.0
+#   b /= 255.0
+
+#   max = [r, g, b].max.to_f
+#   min = [r, g, b].min.to_f
+#   delta = (max - min).to_f
+#   v = (max * 100.0).to_f
+
+#   max != 0.0 ? s = delta / max * 100.0 : s=0
   
-  final byte[] signature =  hmacSha1.doFinal(data.getBytes());
-  
-  return signature.encodeHex()
-}
+#   if (s == 0.0) 
+#     h = 0.0
+#   else
+#       if (r == max)
+#         h = ((g - b) / delta).to_f
+#       elsif (g == max)
+#         h = (2 + (b - r) / delta).to_f
+#       elsif (b == max)
+#         h = (4 + (r - g) / delta).to_f
+#     end
+#     h *= 60.0
+#     h += 360 if (h < 0)
+#   end
+#   return h,s,v
+# end
+# def hsvToRgb(h,s,v)
+#   h /= 360.0
+#   s /= 100.0
+#   v /= 100.0
 
-def sendUpdateCommand(params) {
+#   if s == 0.0
+#      r = v * 255
+#      g = v * 255
+#      b = v * 255
+#   else
+#     h = (h * 6).to_f
+#     h = 0 if h == 6
+#     i = h.floor
+#     var_1 = (v * ( 1.0 - s )).to_f
+#     var_2 = (v * ( 1.0 - s * ( h - i ) )).to_f
+#     var_3 = (v * ( 1.0 - s * ( 1.0 - ( h - i )))).to_f
+#   end
 
-	// Add the devices' IPs to the parameters
-    if(settings.bulb_ips != 'null'){
-		params += [bulb_ips: settings.bulb_ips]
-    }
-    if(settings.rgb_ww_ips != 'null'){
-    	params += [rgb_ww_ips: settings.rgb_ww_ips]
-    }
-    if(settings.rgb_ww_cw_ips != 'null'){
-    	params += [rgb_ww_cw_ips: settings.rgb_ww_cw_ips]
-    }
-    if(settings.legacy_bulb_ips != 'null'){
-    	params += [legacy_bulb_ips: settings.legacy_bulb_ips]
-    }
+#   if i == 0 
+#     r = v
+#     g = var_3
+#     b = var_1
+#   elsif i == 1
+#     r = var_2
+#     g = v
+#     b = var_1
+#   elsif i == 2
+#     r = var_1
+#     g = v
+#     b = var_3
+#   elsif i == 3
+#     r = var_1
+#     g = var_2
+#     b = v
+#   elsif i == 4
+#     r = var_3
+#     g = var_1
+#     b = v
+#   else
+#     r = v
+#     g = var_1
+#     b = var_2
+#   end
 
-    // We need to transmit a UUID, Date, and Time for the REST server to accept our commands
-	final def payload = randomUUID() as String
-    long time = new Date().getTime() 
-    time /= 1000L
-     
-    log.debug "Sending... " + params
-    // Put your generated hash in the 3rd parameter slot 
-    final String signature = hmac(payload + time, 'GENERATED SIGNATURE HERE')
+#     if r==nil
+#       r=0
+#     end
+#     if g==nil
+#       g=0
+#     end
+#     if b==nil
+#       b=0
+#     end
+
+#     r *= 255
+#     g *= 255
+#     b *= 255
+
+#   return r.to_i, g.to_i, b.to_i
+# end
+
+def to_hex(number)
+  number.to_s(16).upcase.rjust(2, '0')
+end
+
+module LEDENET
+  class Api
+    API_PORT ||= 5577
     
-   	new physicalgraph.device.HubAction(
-        method: "POST",
-        path: "/leds",
-        body: params,
-        headers: [
-            HOST: "${settings.localServer}:${settings.localPort}",
-            'X-Signature-Timestamp': time,
-       		'X-Signature-Payload': payload,
-       		'X-Signature': signature
-        ]
-        )
-}
+    $dynamic_variables ||= Hash.new
+    $reset_table ||= Hash.new
 
-def refresh(params) {
-	if(params == null){
-    	params = [:]
-    }
-    // Add the devices' IPs to the parameters
-    if(settings.bulb_ips != 'null'){
-		params += [bulb_ips: settings.bulb_ips]
-    }
-    if(settings.rgb_ww_ips != 'null'){
-    	params += [rgb_ww_ips: settings.rgb_ww_ips]
-    }
-    if(settings.rgb_ww_cw_ips != 'null'){
-    	params += [rgb_ww_cw_ips: settings.rgb_ww_cw_ips]
-    }
-    if(settings.legacy_bulb_ips != 'null'){
-    	params += [legacy_bulb_ips: settings.legacy_bulb_ips]
+    DEFAULT_OPTIONS ||= {
+        reuse_connection: true,
+        max_retries: 2
     }
 
-    // We need to transmit a UUID, Date, and Time for the REST server to accept our commands
-	final def payload = randomUUID() as String
-    long time = new Date().getTime() 
-    time /= 1000L
-     
-    log.debug "Sending... " + params
-    // Put your generated hash in the 3rd parameter slot 
-    final String signature = hmac(payload + time, 'GENERATED SIGNATURE HERE')
-    try {
-        new physicalgraph.device.HubAction(
-            method: "POST",
-            path: "/leds",
-            body: params,
-            headers: [
-                HOST: "${settings.localServer}:${settings.localPort}",
-                'X-Signature-Timestamp': time,
-                'X-Signature-Payload': payload,
-                'X-Signature': signature
-            ] ) 
-    } catch (e) {
-        log.error "error in response: $e"
-    }
-}
+
+    def initialize(device_address, options = {})
+      @device_address = device_address
+      @options = DEFAULT_OPTIONS.merge(options)
+    end
+
+    def on
+      send_bytes_action(0x71, 0x23, 0x0F, 0xA3)
+      true
+    end
+
+    def legacy_bulb_on
+      send_bytes_action(0xCC, 0x23, 0x33)
+      true
+    end
+
+    def off
+      send_bytes_action(0x71, 0x24 ,0x0F, 0xA4)
+      true
+    end
+
+    def legacy_bulb_off
+      send_bytes_action(0xCC, 0x24, 0x33)
+      true
+    end
+
+    def update_ww(r, g, b, ww) # Update a WW wireless device
+      msg = [0x31, r, g, b, ww, 0x00, 0x0f]
+
+      send_bytes_action(*msg, calc_checksum(msg))
+      true
+    end
+
+    def update_ww_cw(r, g, b, ww, cw)
+      # Update Color
+      msg = [0x31, r, g, b, 0x00, 0x00, 0xf0, 0x0f]
+      send_bytes_action(*msg, calc_checksum(msg))
+
+      # Update WW/CW
+      msg = [0x31, 0x00, 0x00, 0x00, ww, cw, 0x0f, 0x0f]
+      send_bytes_action(*msg, calc_checksum(msg))
+
+      
+      true
+    end
+
+    def update_rgb(r, g, b)
+      msg = [0x31, r, g, b, 0x00, 0x0f]
+      send_bytes_action(*msg, calc_checksum(msg))
+      true
+    end
+
+    def update_bulb_color(r, g, b) # Update a Bulb wireless device's color
+      msg = [0x31, r, g, b, 0x00, 0xf0, 0x0f]
+
+      send_bytes_action(*msg, calc_checksum(msg))
+      true
+    end
+
+    def update_legacy_bulb_color(r,g,b)
+      msg = [0x56, r, g, b, 0x00, 0xf0, 0xaa]
+
+      send_bytes_action(*msg)
+      true
+    end
+
+    def update_bulb_white(w) # Update a Bulb wireless device's WW level
+        msg = [0x31, 0x00, 0x00, 0x00, w, 0x0f, 0x0f]
+        send_bytes_action(*msg, calc_checksum(msg))
+        true
+    end
+
+    def update_legacy_bulb_white(w)
+      msg = [0x56, 0x00, 0x00, 0x00, w, 0x0f, 0xaa]
+        send_bytes_action(*msg)
+        true
+    end
+
+    def send_default_function(number, speed)
+      # Function number is 0x25 to 0x38
+      # Mode, Function Number, WW, Return?, Checksum
+      # 0x61 0x25 0x01 0x0f 0x96
+      # 25... Seven color crossfade, 26 red gradual change, 27 green gradual change, 28 blue gradual change, 29 yellow gradul change, 30 cyan gradual change, 31 purple gradual change, 32 white gradual change
+      # 33 red green crossfade, 34 red blue crossfade, 35 green blue crossfade, 36 seven color strobe flash, 37 red strobe flash, 38green strobe flash, 39 blue strobe flash, 40 yellow strobe flash,
+      # 41 cyan strobe flash, 42 purple strobe flash, 43 white strobe flash, 44 white strobe flash, 45 seven color jumping change
+
+
+      # Speed is an inverted percent from 0x00 to 0x64
+      data = [0x61, number, speed, 0x0F]
+      send_bytes_action(*data, calc_checksum(data))
+    end 
+    
+    def send_legacy_default_function(number, speed)
+      data = [0xBB, number, speed, 0x44]
+      send_bytes_action(*data)
+    end
+
+    def send_custom_function(colors_array, speed, type )
+      #0x51, [16 color bytes],  Marker,   speed,  type (3a, 3b, 3c),  0xff, 0x0f, checksum
+      #0x51,  [16 color bytes],  0x00,     0x0b,   0x3c,               0xff, 0x0f, 0x59
+
+      data = [0x51, color_array, 0x00, speed, type, 0xff, 0x0f]
+
+      send_bytes_action(data, calc_checksum(data))
+    end
+
+    def ping # Returns R, G, B, W, Power State, and Device Type
+      return status
+    end
+
+    def current_status # Returns R, G, B, W, Power State, and Device Type
+      current_packet = status
+      return unpack_to_int(current_packet[6]), unpack_to_int(current_packet[7]), unpack_to_int(current_packet[8]), unpack_to_int(current_packet[9]), on?, device_type?
+    end
+    
+    def reconnect!
+      create_socket(current_address)
+    end
+
+    def getInfo
+      msg = Integer(status.each.unpack('C').to_s.delete('[]'))
+    end
+
+    private
+      def calc_checksum(bytes)
+        bytes.reduce(:+) %0x100
+      end
+
+      def unpack_to_int(packed_byte)
+         # Unpacks a byte and returns it as an int
+        packed_byte.unpack('C').to_s.delete('[]').to_i
+      end
+
+      def status
+        socket_action do
+          msg = [0x81, 0x8A, 0x8B, calc_checksum([0x81, 0x8A, 0x8B])]
+          send_bytes(*msg)
+          flush_response(14)
+        end
+      end
+
+      def flush_response(msg_length)
+        @socket.recv(msg_length, Socket::MSG_WAITALL)
+      end
+
+
+      def send_bytes(*b)
+        puts "Sending #{b} to #{@socket}"
+        @socket.write(b.pack('c*'))
+      end
+
+      def send_bytes_action(*b)
+        socket_action { send_bytes(*b) }
+      end
+
+      def create_socket(ip)
+
+        # Prepare the passed data for use
+        ip_name = ip.delete('.')
+        # puts "Dynamic variables are: #{$dynamic_variables}"
+
+        if !$reset_table["@a#{ip_name}"]
+            $reset_table["@a#{ip_name}"] = Time.now
+        end
+
+        elapsed_seconds = ((Time.now - $reset_table["@a#{ip_name}"])).to_i  
+
+        # If the variable doesn't exist, create it
+        if !$dynamic_variables["@a#{ip_name}"] or $dynamic_variables["@a#{ip_name}"].closed? or elapsed_seconds >= 250
+          # puts "Setting a new variable, @a#{ip_name}"
+          $dynamic_variables["@a#{ip_name}"] = TCPSocket.new(ip, API_PORT)
+        end
+
+        # Return our light object
+        $reset_table["@a#{ip_name}"] = Time.now
+        @socket = $dynamic_variables["@a#{ip_name}"]
+      end
+
+      def socket_action
+        Array(@device_address).each{ |current_address|
+          tries = 0
+          begin
+            create_socket(current_address)
+            yield
+          rescue Errno::EPIPE, IOError => e
+            tries += 1
+
+            if tries <= @options[:max_retries]
+              puts "Establishing reconnection"
+              reconnect!
+              retry
+            else
+              raise e
+            end
+          ensure
+            puts "Closing connection" unless @options[:reuse_connection]
+            @socket.close unless @options[:reuse_connection]
+          end
+        }
+      end
+    Thread.new do
+      loop do
+        sleep 50
+        puts "Checking devices' connections"
+        
+          $dynamic_variables.each do |key, api|
+            puts "Checking Device ... #{key}"
+
+            elapsed_seconds = ((Time.now - $reset_table[key])).to_i  
+            if elapsed_seconds >= 250
+              puts "Resetting the timer... The key is #{key} and the api is #{api}"
+              puts "We're connected to #{api.peeraddr}"
+              $dynamic_variables[key] = TCPSocket.new(api.peeraddr[2], api.peeraddr[1])
+              puts "We're connected to #{api.peeraddr}"
+              $reset_table[key] = Time.now
+              puts "Reset #{key} after #{elapsed_seconds}."
+            end
+          end
+      end
+    end
+  end
+end
