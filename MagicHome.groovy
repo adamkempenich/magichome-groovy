@@ -477,7 +477,7 @@ def setColorTemperature(setTemp){
     		brightness_cw = ((100)/(set_strip_cw_temp - cw_low_cutoff_temp))*setTemp + (100 - (100/(set_strip_cw_temp - cw_low_cutoff_temp))*set_strip_cw_temp)
         }
         else{
-        	brightness_cw = ((100)/(set_strip_cw_temp - cw_high_cutoff_temperature))*setTemp + (100 - (100/(set_strip_cw_temp - cw_high_cutoff_temperature))*set_strip_cw_temp)
+        	brightness_cw = ((100)/(set_strip_cw_temp - cw_high_cutoff_temp))*setTemp + (100 - (100/(set_strip_cw_temp - cw_high_cutoff_temp))*set_strip_cw_temp)
         }
     }
     
