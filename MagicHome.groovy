@@ -29,6 +29,8 @@ metadata {
         command "preset8"
 		command "setPresetSpeed"
         command "setColorTemperature"
+        command "on"
+        command "off" 
         
         attribute "WWLevel", "string"
         attribute "CWLevel", "string"
@@ -37,67 +39,87 @@ metadata {
 	}
     
     preferences {  
-        section("Local server address and port"){
-            input "localServer", "text", title: "Server", description: "Local Web Server IP", required: true
-            input "localPort", "number", title: "Port", description: "Local Web Server Port", required: true, defaultValue: 80
-        }
-       input(name:"bulb_ips", type:"string", title: "Bulb IP Addresses:",
-       		  description: "Bulb IP Addresses (Comma Separated)", defaultValue: "${bulb_ips}",
-              required: false, displayDuringSetup: true)
-		
-        input(name:"rgb_ww_ips", type:"string", title: "WW IP Addresses:",
-       		  description: "RGB & RGB + WW IP Addresses (Comma Separated)", defaultValue: "${rgb_ww_ips}",
-              required: false, displayDuringSetup: true)
-              
+        input "localServer", "text", title: "Server", description: "Local Web Server IP", required: true
+        input "localPort", "number", title: "Port", description: "Local Web Server Port", required: true, defaultValue: 80
+        
+        input(name:"bulb_ips", type:"string", title: "Bulb IP Addresses:",
+            description: "Bulb IP Addresses (Comma Separated)", defaultValue: "${bulb_ips}",
+            required: false, displayDuringSetup: true)
+		input(name:"rgb_ww_ips", type:"string", title: "WW IP Addresses:",
+            description: "RGB & RGB + WW IP Addresses (Comma Separated)", defaultValue: "${rgb_ww_ips}",
+            required: false, displayDuringSetup: true)
         input(name:"rgb_ww_cw_ips", type:"string", title: "RGB + WW + CW Addresses:",
-       		  description: "RGB + WW + CW IP Addresses (Comma Separated)", defaultValue: "${rgb_ww_cw_ips}",
+            description: "RGB + WW + CW IP Addresses (Comma Separated)", defaultValue: "${rgb_ww_cw_ips}",
+            required: false, displayDuringSetup: true)
+        input(name:"legacy_bulb_ips", type:"string", title: "Legacy Bulb IP Addresses:",
+              description: "Legacy Bulb (Firmware <= v3 IP Addresses (Comma Separated)", defaultValue: "${legacy_bulb_ips}",
               required: false, displayDuringSetup: true)
-              
-         input(name:"legacy_bulb_ips", type:"string", title: "Legacy Bulb IP Addresses:",
-       		  description: "Legacy Bulb (Firmware <= v3 IP Addresses (Comma Separated)", defaultValue: "${legacy_bulb_ips}",
-              required: false, displayDuringSetup: true)
 
-
-
-
-		 input(name:"temperature_uses_ww", type:"bool", title: "Do any LED strip devices have a dedicated WW channel?:",
-       		  description: "For use with color temperature calculation.", defaultValue: false,
+		
+	    input(name:"power_on_with_brightness_change", type:"bool", title: "Power on device with brightness change?",
+       		  description: "Makes devices behave like other switches.", defaultValue: false,
               required: true, displayDuringSetup: true)
               
-         input(name:"ww_strip_temperature", type:"number", title: "What color temperature is your WW strip rated at, if any:",
-       		  description: "Temp in K", defaultValue: 3500,
-              required: false, displayDuringSetup: true)
+
+		input(name:"temperature_uses_ww", type:"bool", title: "Do any LED strip devices have a dedicated WW channel?:",
+			description: "For use with color temperature calculation.", defaultValue: false,
+			required: true, displayDuringSetup: true)
+		input(name:"ww_strip_temperature", type:"number", title: "What color temperature is your WW strip rated at, if any:",
+			description: "Temp in K", defaultValue: 3500,
+			required: false, displayDuringSetup: true)
+		input(name:"ww_high_cutoff_temperature", type:"number", title: "High-end WW point?",
+			description: "Temp in K", defaultValue: 6000,
+			required: true, displayDuringSetup: true)
+        input(name:"ww_low_cutoff_temperature", type:"number", title: "Low-end WW point?",
+			description: "Temp in K", defaultValue: 2200,
+			required: true, displayDuringSetup: true)
               
-         input(name:"temperature_uses_cw", type:"bool", title: "Do any LED strip devices have a dedicated CW channel?:",
-       		  description: "For use with color temperature calculation.", defaultValue: false,
-              required: true, displayDuringSetup: true)
+		input(name:"temperature_uses_cw", type:"bool", title: "Do any LED strip devices have a dedicated CW channel?:",
+			description: "For use with color temperature calculation.", defaultValue: false,
+			required: true, displayDuringSetup: true)
+		input(name:"cw_strip_temperature", type:"number", title: "What color temperature is your CW strip rated at, if any:",
+			description: "Temp in K", defaultValue: 6500,
+			required: false, displayDuringSetup: true)
+		input(name:"cw_low_cutoff_temperature", type:"number", title: "Low-End CW point?",
+			description: "Temp in K", defaultValue: 2800,
+			required: true, displayDuringSetup: true)
+        input(name:"cw_high_cutoff_temperature", type:"number", title: "High-end CW point?",
+			description: "Temp in K", defaultValue: 7000,
+			required: true, displayDuringSetup: true)
+            
+         
+		input(name:"white_balance", type:"number", title: "What is your neutral white temperature?:",
+			description: "Temp in K", defaultValue: 4000,
+			required: true, displayDuringSetup: true)
+         
+		input(name:"warm_white_hue", type:"number", title: "WW Hue:",
+			description: "0-360", defaultValue: 20,
+			required: false, displayDuringSetup: true)
+		input(name:"warm_white_saturation_max", type:"number", title: "Max WW Saturation:",
+			description: "0-100", defaultValue: 100,
+			required: false, displayDuringSetup: true)
+		input(name:"warm_white_saturation_min", type:"number", title: "Min WW Saturation:",
+			description: "0-100", defaultValue: 0,
+			required: false, displayDuringSetup: true)
               
-         input(name:"cw_strip_temperature", type:"number", title: "What color temperature is your CW strip rated at, if any:",
-       		  description: "Temp in K", defaultValue: 6500,
-              required: false, displayDuringSetup: true)
-              
-         input(name:"warm_white_hue", type:"number", title: "WW Hue:",
-       		  description: "0-360", defaultValue: 20,
-              required: false, displayDuringSetup: true)
-         input(name:"warm_white_saturation", type:"number", title: "WW Saturation:",
-       		  description: "0-100", defaultValue: 100,
-              required: false, displayDuringSetup: true)
-              
-         input(name:"cool_white_hue", type:"number", title: "CW Hue (all devices):",
-       		  description: "0-360", defaultValue: 214,
-              required: false, displayDuringSetup: true)
-         input(name:"cool_white_saturation", type:"number", title: "CW Saturation:",
-       		  description: "0-100", defaultValue: 100,
-              required: false, displayDuringSetup: true)
+		input(name:"cool_white_hue", type:"number", title: "CW Hue (all devices):",
+			description: "0-360", defaultValue: 214,
+			required: false, displayDuringSetup: true)
+		input(name:"cool_white_saturation_max", type:"number", title: "Max CW Saturation:",
+			description: "0-100", defaultValue: 100,
+			required: false, displayDuringSetup: true)
+		input(name:"cool_white_saturation_min", type:"number", title: "Min CW Saturation:",
+			description: "0-100", defaultValue: 0,
+			required: false, displayDuringSetup: true)
 	}
     
     tiles(scale: 2) {
-    	multiAttributeTile(name:"switch", type: "lighting", width: 6, height: 4, canChangeIcon: true){
+		multiAttributeTile(name:"switch", type: "lighting", width: 6, height: 4, canChangeIcon: true){
 			tileAttribute ("device.switch", key: "PRIMARY_CONTROL") {
 				attributeState("on", label:'${name}', action:"switch.off", icon:"st.illuminance.illuminance.bright", backgroundColor: "#F39C12", nextState:"turningOff")
 				attributeState "off", label:'${name}', action:"switch.on", icon:"st.illuminance.illuminance.dark", backgroundColor:"#ffffff", nextState:"turningOn"
-				attributeState "turningOn", label:'Turn on...', icon:"st.illuminance.illuminance.bright", backgroundColor:"#f7bb5d"
-				attributeState "turningOff", label:'Turn off...', icon:"st.illuminance.illuminance.dark", backgroundColor:"#f7bb5d"
+				attributeState "turningOn", label:'Turning on...', icon:"st.illuminance.illuminance.bright", backgroundColor:"#f7bb5d"
+				attributeState "turningOff", label:'Turning off...', icon:"st.illuminance.illuminance.dark", backgroundColor:"#f7bb5d"
             }
 			tileAttribute ("device.level", key: "SLIDER_CONTROL") {
 				attributeState "level", action:"switch level.setLevel"
@@ -108,7 +130,6 @@ metadata {
             tileAttribute("device.level", key: "SECONDARY_CONTROL") {
    		 		attributeState("default", label:'Level: ${currentValue}%', unit:"%")
   			}
-
 		}
         controlTile("WWSliderControl", "WWLevel", "slider", height: 2,
              width: 4, inactiveLabel: false, range:"(0..100)") {
@@ -167,8 +188,7 @@ metadata {
     		state "PresetSpeed", action:"setPresetSpeed"
 		}
     }
-   
-    
+
 	main(["switch"])
 	details(["switch", 
     		"rgbSelector", 
@@ -204,8 +224,6 @@ private parseResponse(resp){
 log.debug resp
 
 resp.headers.each {
-    	// log.info "-----------------${it.name} >> ${it.value}--------------"
-        
          if(it.name.equalsIgnoreCase("powerState") && it.value != null){
          	if(it.value.toString() != device.currentValue("power")){
             	log.info "Changing power state from ${device.currentValue("power")} to ${it.value}"
@@ -260,8 +278,6 @@ resp.headers.each {
     }
 }
 
-
-
 // Handle commands
 // Turn the bulb on
 def on() {
@@ -275,9 +291,12 @@ def off() {
     sendUpdateCommand([status: "off"])
 }
 
-
 def setSaturation(saturation) {
-
+	
+    // Basic error handling
+    if(saturation < 0 ){ saturation = 0}
+    if(saturation > 100){ saturation = 100}
+    
 	sendEvent(name: "saturation", value: saturation)
     
     // Send info to the device log
@@ -289,8 +308,10 @@ def setSaturation(saturation) {
 
 def setHue(hue) {
 	
-    // Remove this from the public commit! It enables WW from certain homekit apps
-    
+    // Basic error handling
+   	if(hue < 0 ){ hue = 0}
+    if(hue > 100){ hue = 100}
+   
     if(hue == 11.76470588235294){
     	hue = 16.66666666666666
     }
@@ -304,11 +325,11 @@ def setHue(hue) {
 }
 
 def setLevel(level) {
-	//If device is off, turn it on.
-    if(device.currentValue("status") != "on"){
-    	on()
-    }
-
+	
+    // Basic error handling
+    if(level < 0 ){ level = 0}
+    if(level > 100){ level = 100}
+	
     sendEvent(name: "level", value: level)
     
     // Send info to the device log
@@ -318,7 +339,8 @@ def setLevel(level) {
     setColor([level: level])
 }
 
-def setColor(value) {
+def setColor(value) {    
+
     // If a hue wasn't passed through, re-assign it
     if(!value.hue){ value += [hue: device.currentValue("hue")] }
     else{
@@ -341,7 +363,7 @@ def setColor(value) {
     if (value.hex){ sendEvent(name: "color", value: value.hex) }
     
     //Sending RGB is faster than sending hsl
-    //if (!value.red && !value.blue && !value.green){ 	
+    if (!value.red || !value.blue || !value.green){ 	
     	log.debug 'Adding RGB via HSV conversion'
         
         float conversionhue = device.currentValue('hue')/100
@@ -368,17 +390,18 @@ def setColor(value) {
         else if(h==5) { value += [red: conversionvalue, green: p,blue: q] }
         else{ value += [red: 0, green: 0, blue: 0] }
 
-	//}
+	}
+    
     // Add Warm White Data
     if(!value.WWLevel){
-        if(device.currentValue("WWLevel") == null){ sendEvent(name: "WWLevel", value: 100) }
+        if(device.currentValue("WWLevel") == null){ sendEvent(name: "WWLevel", value: 99) }
         value += [WWLevel: device.currentValue('WWLevel')]
     }
     sendEvent(name: "WWLevel", value: value.WWLevel)
     
     // Add Cold White Data
     if(!value.CWLevel){
-        if(device.currentValue("CWLevel") == null){ sendEvent(name: "CWLevel", value: 100) }
+        if(device.currentValue("CWLevel") == null){ sendEvent(name: "CWLevel", value: 99) }
         value += [CWLevel: device.currentValue('CWLevel')]
     }
     sendEvent(name: "CWLevel", value: value.CWLevel)
@@ -386,6 +409,13 @@ def setColor(value) {
     // Disable any current presets
     sendEvent(name:"currentPreset", value: "0")
 
+	if(settings.power_on_with_brightness_change){
+    	if(device.currentValue("status") != "on"){
+        	on()
+            value += [status: "on"]
+    	}
+    }
+    
     //Send the command to the device
     sendUpdateCommand(value)
 }
@@ -394,79 +424,81 @@ def setColorTemperature(setTemp){
 
    log.info 'received color temperature ' + setTemp + ' to set'
      
-// If the device's temperature was requested to change, then let's set some proportions!
-// Bulbs need to change their hue to ~6.95, where a saturation of 92 will be warm, and 70 will be cool
-// Additionally, we need to take the difference of 2700 to 6500 and change our warm and cool white sliders
+    // If the device's temperature was requested to change, then let's set some proportions!
+    // Bulbs need to change their hue to ~6.95, where a saturation of 92 will be warm, and 70 will be cool
+    // Additionally, we need to take the difference of 2700 to 6500 and change our warm and cool white sliders
 	float saturationValue = 0
     float hueValue = 0
     int brightness_ww = 0
     int brightness_cw = 0
     
-    
     int set_cool_white_hue = settings.cool_white_hue
     int set_warm_white_hue = settings.warm_white_hue
-    int set_cool_white_saturation = settings.cool_white_saturation
-    int set_warm_white_saturation = settings.warm_white_saturation
+	int white_balance = settings.white_balance
 
+	// In case anyone really wants to have fun, we'd better calm 'em down
+	if (white_balance < 2000) { white_balance = 2000 } 
+    if (white_balance > 8000) { white_balance = 8000 }
+    
     int set_strip_ww_temp = settings.ww_strip_temperature
     int set_strip_cw_temp = settings.cw_strip_temperature
-
-
-
+	int ww_high_cutoff_temp = settings.ww_high_cutoff_temperature
+    int ww_low_cutoff_temp = settings.ww_low_cutoff_temperature
+    int cw_low_cutoff_temp = settings.cw_low_cutoff_temperature
+    int cw_high_cutoff_temp = settings.cw_high_cutoff_temperature
+	
     int device_level = device.currentValue("level")
     
     
     // Here's my fast color science. A Tone of ~4000 should be pretty neutral, so there should be no saturation at that point
-    // I should add an offset for this in the preferences. "Neutral white point", or something
-    if(setTemp >=4000){
-    	int xOffset = setTemp - 4000
-    	saturationValue = 1.8 * Math.sqrt(xOffset) * set_cool_white_saturation / 100
+    // Essentally, as the temperature approaches the neutral point, our two colors' saturations transition from 0 to 100 or 100 to 0
+    if(setTemp >= white_balance){
+    	int xOffset = setTemp - white_balance
+    	saturationValue = ((((100 - settings.cool_white_saturation_min)/100) * (1.8 * Math.sqrt(xOffset))) + settings.cool_white_saturation_min) * settings.cool_white_saturation_max / 100
         hueValue =  set_cool_white_hue / 3.6 
     }
     else{
-    	int xOffset = 4000 - setTemp
-    	saturationValue = 2.166666 * Math.sqrt(xOffset) * set_warm_white_saturation / 100
+    	int xOffset = white_balance - setTemp
+    	saturationValue = ((((100 - settings.warm_white_saturation_min)/100) * (2.166666 * Math.sqrt(xOffset))) + settings.warm_white_saturation_min) * settings.warm_white_saturation_max / 100
         hueValue =  set_warm_white_hue / 3.6
     }
     
-        
-        
-    // Formula derived from y = mx + b 
+    // Set the warm white and cold white channel temperatures
     if(settings.temperature_uses_ww == true){
     	if(set_strip_ww_temp <= setTemp){
-    		brightness_ww = ((100)/(set_strip_ww_temp - 7000))*setTemp + (100 - (100/(set_strip_ww_temp-7000))*set_strip_ww_temp)
+    		brightness_ww = ((100)/(set_strip_ww_temp - ww_high_cutoff_temp))*setTemp + (100 - (100/(set_strip_ww_temp - ww_high_cutoff_temp))*set_strip_ww_temp)
         }
         else{
-        	brightness_ww = ((100)/(set_strip_ww_temp - 2000))*setTemp + (100 - (100/(set_strip_ww_temp-2000))*set_strip_ww_temp)
+        	brightness_ww = ((100)/(set_strip_ww_temp - ww_low_cutoff_temp))*setTemp + (100 - (100/(set_strip_ww_temp - ww_low_cutoff_temp))*set_strip_ww_temp)
         }
     }
     if(settings.temperature_uses_cw == true){
-        if(settings.cw_strip_temperature.toInteger() >= setTemp){
-    		brightness_cw = ((100)/(set_strip_cw_temp - 2000))*setTemp + (100 - (100/(set_strip_cw_temp-2000))*set_strip_cw_temp)
+        if(set_strip_cw_temp >= setTemp){
+    		brightness_cw = ((100)/(set_strip_cw_temp - cw_low_cutoff_temp))*setTemp + (100 - (100/(set_strip_cw_temp - cw_low_cutoff_temp))*set_strip_cw_temp)
         }
         else{
-        	brightness_cw = ((100)/(set_strip_cw_temp - 7000))*setTemp + (100 - (100/(set_strip_cw_temp-7000))*set_strip_cw_temp)
+        	brightness_cw = ((100)/(set_strip_cw_temp - cw_high_cutoff_temperature))*setTemp + (100 - (100/(set_strip_cw_temp - cw_high_cutoff_temperature))*set_strip_cw_temp)
         }
     }
     
-
-    
     // Basic error handlng
-    if(brightness_ww < 0){ brightness_ww = 0}
+    if(brightness_ww < 0 ){ brightness_ww = 0}
     if(brightness_ww > 100){ brightness_ww = 100}
     if(brightness_cw < 0){ brightness_cw = 0}
     if(brightness_cw > 100){brightness_cw = 100}
    
     // Adjust the brightness of the WW/CW to not exceed the current device color level
+    if(device_level > 0 && device_level < 1 ){ device_level = 1}
     brightness_ww = brightness_ww * device_level/100
     brightness_cw = brightness_cw * device_level/100
+    if(brightness_ww > 0 && brightness_ww < 1 ){ brightness_ww = 1}
+	if(brightness_cw > 0 && brightness_cw < 1 ){ brightness_cw = 1}
 
 
-	def value = [hue: hueValue, saturation: saturationValue, WWLevel: brightness_ww, CWLevel: brightness_cw]
+   
+	def value = [hue: hueValue, saturation: saturationValue, WWLevel: brightness_ww.toString(), CWLevel: brightness_cw.toString()]
     
     setColor(value)
-
-
 }
 
 def setAdjustedColor(value){
@@ -475,8 +507,13 @@ def setAdjustedColor(value){
 }
 
 def setWWLevel(WWLevel){
-	 // Update the device level
-	sendEvent(name: "WWLevel", value: WWLevel)
+    
+    // Basic Error Handling
+	if(WWLevel < 0 ){ WWLevel = 0}
+    if(WWLevel > 100){ WWLevel = 100}
+    
+   	// Update the device level
+    sendEvent(name: "WWLevel", value: WWLevel)
 
     // Send info to the device log
 	log.info "setWWLevel(WWLevel: " + device.currentValue("WWLevel") + ")"
@@ -486,6 +523,11 @@ def setWWLevel(WWLevel){
 }
 
 def setCWLevel(CWLevel){
+
+	// Basic error handling
+	if(CWLevel < 0 ){ CWLevel = 0}
+    if(CWLevel > 100){ CWLevel = 100}
+    
 	 // Update the device level
 	sendEvent(name: "CWLevel", value: CWLevel)
 
@@ -497,6 +539,8 @@ def setCWLevel(CWLevel){
 }
 
 def setPresetSpeed(presetSpeed){
+
+	// I need to rewrite this section
     if(presetSpeed == null) {sendEvent(name:"PresetSpeed", value: 50)}
     if(presetSpeed <= 100 && presetSpeed >= 0){
     sendEvent(name:"PresetSpeed", value: presetSpeed)
@@ -536,6 +580,7 @@ def setPresetSpeed(presetSpeed){
 }
 
 
+// I need to rewrite this section because all of these values are totally borked up
 def preset1() { if(device.currentValue("PresetSpeed") == null) {setPresetSpeed(50)}
 				 sendEvent(name:"currentPreset", value: "1")
                  log.debug 'Calling preset 1 with PresetSpeed ' + device.currentValue("PresetSpeed") + '% and currentPreset #' + device.currentValue("currentPreset")+'.'
@@ -585,8 +630,8 @@ def hmac(String data, String key) throws SignatureException {
   return signature.encodeHex()
 }
 
-def sendUpdateCommand(params) {
 
+def sendUpdateCommand(params) {
 	// Add the devices' IPs to the parameters
     if(settings.bulb_ips != 'null'){
 		params += [bulb_ips: settings.bulb_ips]
@@ -601,7 +646,7 @@ def sendUpdateCommand(params) {
     	params += [legacy_bulb_ips: settings.legacy_bulb_ips]
     }
 
-    // We need to transmit a UUID, Date, and Time for the REST server to accept our commands
+    // We need to transmit a UUID, Date, and Time for the REST server to accept commands
 	final def payload = randomUUID() as String
     long time = new Date().getTime() 
     time /= 1000L
