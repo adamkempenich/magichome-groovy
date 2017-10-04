@@ -5,7 +5,7 @@ import javax.crypto.Mac
 import java.security.SignatureException
 
 metadata {
-	definition (name: "MagicHome Wifi Devices", namespace: "smartthings", author: "SmartThings") {
+	definition (name: "MagicHome Wifi Devices", namespace: "adamkempenich", author: "Adam Kempenich") {
 		capability "Switch Level"
 		capability "Actuator"
 		capability "Color Control"
